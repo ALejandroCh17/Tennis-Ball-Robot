@@ -1,5 +1,11 @@
 import cv2
 import numpy as np
+from robot_hat import Motors
+
+# Initialize the Motors
+motors = Motors()
+motors.set_left_id(1)  # Assuming this is necessary for your specific robot configuration
+motors.set_right_id(2)
 
 # Constants for distance estimation (these need to be calibrated for your setup)
 BALL_DIAMETER_CM = 6.7  # Diameter of a tennis ball in centimeters
@@ -11,6 +17,33 @@ def estimate_distance(radius_pixels):
         return (FOCAL_LENGTH_PIXELS * BALL_DIAMETER_CM) / (radius_pixels * 2)
     else:
         return -1  # Return -1 if the ball is not detected or radius is zero
+
+# Compute the motor speeds based on the ball's position
+def compute_motor_speeds(center_x, frame_width, distance):
+    MAX_SPEED = 100
+    DISTANCE_THRESHOLD = 50
+    distance_factor = max(0, min(1, (distance - DISTANCE_THRESHOLD) / DISTANCE_THRESHOLD))
+
+    # Calculate speed adjustments based on the ball's position
+    if center_x < frame_width // 3:
+        left_speed = distance_factor * MAX_SPEED
+        right_speed = 0  # Stop the right motor to turn
+    elif center_x > (frame_width // 3) * 2:
+        right_speed = distance_factor * MAX_SPEED
+        left_speed = 0  # Stop the left motor to turn
+    else:
+        left_speed = right_speed = distance_factor * MAX_SPEED
+
+    # Set motor speeds
+    motors.speed(left_speed, right_speed)
+# Overlay motor speeds and distance on the frame
+def overlay_info(frame, distance, left_speed, right_speed):
+    cv2.putText(frame, f"Distance to ball: {distance:.2f} cm", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    cv2.putText(frame, f"Left Motor Speed: {left_speed:.2f}", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    cv2.putText(frame, f"Right Motor Speed: {right_speed:.2f}", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
 # Initialize the webcam
 cap = cv2.VideoCapture(0)
@@ -41,14 +74,19 @@ while True:
         # Draw the circle and centroid on the frame
         cv2.circle(frame, center, radius, (0, 255, 0), 2)
         
-        # Estimate and print the distance
+        # Estimate the distance
         distance = estimate_distance(radius)
-        if distance > 0:
-            print(f"Estimated distance to the ball: {distance:.2f} cm")
-        else:
-            print("Ball not detected")
+        # Compute the motor speeds
+        motor_speeds = compute_motor_speeds(center[0], frame.shape[1], distance)
+        # Overlay the information on the frame
+        overlay_info(frame, distance, motor_speeds)
+        
+    else:
+        # If the ball is not found, display this information
+        cv2.putText(frame, "Ball not detected", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-    # Display the resulting frame
+    # Display the resulting frame with overlays
     cv2.imshow('Tennis Ball Tracker', frame)
 
     # Press 'q' to exit the loop
@@ -58,3 +96,4 @@ while True:
 # When everything is done, release the capture
 cap.release()
 cv2.destroyAllWindows()
+
