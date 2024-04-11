@@ -29,7 +29,7 @@ while True:
         break  # Exit the loop if confidence is high
     
     # Process the prediction here (e.g., display it)
-    print(prediction)
+    print("Prediction: ", prediction)
     
     # Show the frame (optional)
     cv2.imshow('Video', frame)
