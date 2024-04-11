@@ -1,0 +1,3 @@
+Based off of this repo https://github.com/sunnyjaiswal22/raspberry-pi/blob/main/rc-car/control_robot.py
+
+Be sure to have the requirements as listed on the repo (only 2)
