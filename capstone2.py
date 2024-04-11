@@ -22,6 +22,11 @@ while True:
     
     # Predict
     prediction = model.predict(frame_batch)
+
+    # Check prediction confidence
+    if prediction[0][0] >= 0.51:
+        print("High confidence detected. Stopping video feed.")
+        break  # Exit the loop if confidence is high
     
     # Process the prediction here (e.g., display it)
     print(prediction)
@@ -31,7 +36,7 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):  # Exit on pressing 'q'
         break
 
-    time.sleep(1) 
+    #time.sleep(1) 
 
 cap.release()
 cv2.destroyAllWindows()
