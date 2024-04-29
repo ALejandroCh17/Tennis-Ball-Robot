@@ -1,0 +1,4 @@
+tennis-ball 1.0000 21 1 202 175
+tennis-ball 1.0000 445 44 539 136
+tennis-ball 0.9994 537 326 640 572
+tennis-ball 0.3298 324 462 355 508
