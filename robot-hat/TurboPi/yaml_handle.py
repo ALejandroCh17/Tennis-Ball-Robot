@@ -1,6 +1,6 @@
 import yaml
-lab_file_path = '/home/robot2/robot-hat/TurboPi/lab_config.yaml'
-servo_file_path = '/home/robot2/robot-hat/TurboPi/servo_config.yaml'
+lab_file_path = '/home/rally/robot-hat/TurboPi/lab_config.yaml'
+servo_file_path = '/home/rally/robot-hat/TurboPi/servo_config.yaml'
 
 def get_yaml_data(yaml_file):
     file = open(yaml_file, 'r', encoding='utf-8')

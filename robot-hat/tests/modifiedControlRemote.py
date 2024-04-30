@@ -10,7 +10,7 @@ pwm = PWM(pwm_channel)
 pwm.freq(800)  # Example frequency
 
 motors = Motors()
-power = 40
+power = 50
 
 def forward():
     motors[1].speed(power)  # Motor 1 forward

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf8
 import sys
-sys.path.append('/home/robot2/robot-hat/TurboPi')
+sys.path.append('/home/rally/robot-hat/TurboPi')
 import cv2
 import time
 import math
@@ -13,6 +13,7 @@ from robot_hat import Motors
 # Initialize camera and motors
 camera = Camera.Camera()
 motors = Motors()
+diameter = 0
 
 def load_config():
     global lab_data
@@ -34,10 +35,11 @@ def getAreaMaxContour(contours):
 
 def run(img):
     global lab_data
+    global diameter
     size = (640, 480)
     camera_center_x = 320  # Center of the camera feed on the x-axis
     center_threshold_x = 150  # Allowable error in pixels to consider the ball centered on the x-axis
-    target_color = ('yellow',)  # Assuming green is the target color
+    target_color = ('green',)  # Assuming green is the target color
     power = 40
     power_sideways = 50
     
@@ -85,6 +87,7 @@ def run(img):
                 break
     
     if not ball_detected:
+        print(diameter)
         motors.stop()
         
     return img
