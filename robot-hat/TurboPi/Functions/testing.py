@@ -10,25 +10,6 @@ import numpy as np
 import yaml_handle
 from robot_hat import Motors, ADC, PWM, Ultrasonic, Pin, reset_mcu
 from picamera2 import Picamera2, Preview
-import tensorflow as tf
-
-# Load the TensorFlow Lite model.
-interpreter = tf.lite.Interpreter(model_path="/home/rally/robot-hat/TurboPi/Functions/Edgar/custom_model_lite/detect.tflite")
-interpreter.allocate_tensors()
-
-# Get input and output tensors.
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-# Load the label map if available.
-# Replace labels_path with your label map file path.
-labels = []
-with open("/home/rally/robot-hat/TurboPi/Functions/Edgar/custom_model_lite/labelmap.txt", "r") as f:
-    labels = [line.strip() for line in f.readlines()]
-
-# Define the threshold for detection confidence.
-threshold = .50
-balls_detected = False
 
 #us = Ultrasonic(Pin("D0"), Pin("D1"))
 upperBound1 = 11.0
@@ -48,48 +29,13 @@ pwm.freq(800)  # Example frequency
 camera = Picamera2(0)  # Use index 0 for the available camera device
 camera.configure(camera.create_preview_configuration())
 motors = Motors()
-ir_sensor = ADC('A0') 
+ir_sensor = ADC('A0')
+right_sensor = ADC('A1')
+left_sensor = ADC('A2') 
 over_160 = False
 diameter = 0
 last_seen_time = 0
-
-def object_detected(frame):
-    detections = detect_objects(frame)
-    # Draw bounding boxes around detected objects.
-    if(detections != None):
-        for label, confidence in detections:
-            cv2.putText(frame, '{}: {:.2f}'.format(label, confidence), (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            print("tennis ball in view")
-            balls_detected = True
-
-    return balls_detected
-            
-
-def preprocess_image(image):
-    input_shape = input_details[0]['shape']
-    img = cv2.resize(image, (input_shape[2], input_shape[1]))  # Swap dimensions for TensorFlow Lite model
-    img = img / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img.astype(input_details[0]['dtype'])
-
-# Function to perform object detection on input image.
-def detect_objects(image):
-    input_data = preprocess_image(image)
-    interpreter.set_tensor(input_details[0]['index'], input_data)
-    interpreter.invoke()
-
-    output_data = interpreter.get_tensor(output_details[0]['index'])
-    output_data = np.squeeze(output_data)
-
-    # Filter out detections with confidence scores lower than threshold.
-    detections = []
-    for i, score in enumerate(output_data):
-        if score > threshold:
-            class_id = int(i)
-            confidence = score
-            label = labels[class_id] if class_id < len(labels) else 'Class {}'.format(class_id)
-            detections.append((label, confidence))
-    return detections
+blade_triggered = True
 
 def load_config():
     global lab_data
@@ -115,6 +61,50 @@ def check_ir_sensor():
     if voltage > 0.5:
         return True
     return False
+
+def check_right_sensor():
+    value = right_sensor.read()
+    voltage = value * 3.3 / 4095
+    if voltage > 0.5:
+        return False
+    return True
+
+def check_left_sensor():
+    value = left_sensor.read()
+    voltage = value * 3.3 / 4095
+    if voltage > 0.5:
+        return False
+    return True
+
+def obstacle_right():
+    power_sideways = 50
+    power = 40
+    motors[1].speed(-power_sideways)
+    motors[2].speed(-power_sideways)
+    time.sleep(1.5)
+    motors[1].speed(-power_sideways)
+    motors[2].speed(power_sideways)
+    time.sleep(1.5)
+
+    motors.stop()
+    global blade_triggered
+    blade_triggered = True
+
+
+def obstacle_left():
+    power_sideways = 50
+    power = 40
+    motors[1].speed(-power_sideways)
+    motors[2].speed(-power_sideways)
+    time.sleep(1.5)
+    motors[1].speed(power_sideways)
+    motors[2].speed(-power_sideways)
+    time.sleep(1.5)
+
+    motors.stop()
+    global blade_triggered
+    blade_triggered = True
+
 
 def is_over_160():
     global diameter
@@ -153,6 +143,22 @@ def trigger_blades():
     pwm.pulse_width_percent(0)
     time.sleep(1)
     correct_blades()
+    global blade_triggered
+    blade_triggered = True
+
+def patrol():
+    global blade_triggered
+    if ball_detected:
+        blade_triggered = False
+        return
+    power_sideways = 50
+    motors[1].speed(power_sideways)
+    motors[2].speed(-power_sideways)
+    time.sleep(1.0)
+    motors[1].speed(0)
+    motors[2].speed(0)
+    time.sleep(1.0)
+    
     
 
 def fallback_strategy():
@@ -168,6 +174,8 @@ def run(img):
     global diameter
     global ball_detected
     global last_seen_time
+    global good_to_patrol
+    global blade_triggered
 
     size = (640, 480)
     camera_center_x = 320  # Center of the camera feed on the x-axis
@@ -175,14 +183,17 @@ def run(img):
     target_color = ('yellow',)  # Assuming green is the target color
     power = 40
     power_sideways = 50
-    timeout = 1.0
-
+    timeout = 1.0 
+    ball_detected = False
+    
     img_copy = img.copy()
     frame_resize = cv2.resize(img_copy, size, interpolation=cv2.INTER_NEAREST)
     frame_gb = cv2.GaussianBlur(frame_resize, (3, 3), 3)
     frame_lab = cv2.cvtColor(frame_gb, cv2.COLOR_BGR2LAB)
-    ball_detected = False
 
+
+    
+    
     for i in target_color:
         if i in lab_data:
             frame_mask = cv2.inRange(frame_lab,
@@ -192,53 +203,143 @@ def run(img):
             closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
             contours = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
             areaMaxContour, area_max = getAreaMaxContour(contours)
+            
+            #print("BALL ", ball_detected)
+            
 
             if area_max > 1000:
                 ball_detected = True
+                print(ball_detected)
+                blade_triggered = False
                 over_160 = False
                 last_seen_time = time.time()
                 (center_x, center_y), radius = cv2.minEnclosingCircle(areaMaxContour)
                 diameter = 2 * radius
                 cv2.circle(img, (int(center_x), int(center_y)), int(radius), (0, 255, 0), 2)
-
+                
                 # If the diameter is over 200 pixels but less than 350, move forward without checking centering
                 if 200 < diameter < 350:
                     motors[1].speed(power)
                     motors[2].speed(power)
                 # Stop if the diameter is 350 pixels or more
                 elif diameter >= 350:
-                    print("Check 1")
+                    #print("Check 1")
                     motors.stop()
                 # Adjust the car's direction based on the ball's position if the diameter is 200 pixels or less
                 elif abs(center_x - camera_center_x) >= center_threshold_x:
                     if center_x < camera_center_x:  # Ball is to the left, rotate car to the left
-                        print("Moving left", ball_detected, " ", diameter)
+                        #print("Moving left", ball_detected, " ", diameter)
                         motors[1].speed(-power_sideways)
                         motors[2].speed(power_sideways)
+
+                        if check_right_sensor():
+                            obstacle_right()
+
+                        if check_left_sensor():
+                            obstacle_left()
                     else:  # Ball is to the right, rotate car to the right
-                        print("Moving right")
+                        #print("Moving right")
                         motors[1].speed(power_sideways)
                         motors[2].speed(-power_sideways)
+
+                        if check_right_sensor():
+                            obstacle_right()
+
+                        if check_left_sensor():
+                            obstacle_left()    
+
                 # If the ball is centered and diameter is less than or equal to 200 pixels, move forward
                 else:
+                    #print("moving forward")
+                    time.sleep(0.01)
+                    motors.stop()
                     motors[1].speed(power)
                     motors[2].speed(power)
+                    #print("After moving forward")
+
+                    if check_ir_sensor():
+                        #print("Triggering scooper ", diameter)
+                        motors.stop()
+                        trigger_blades()
+                        time.sleep(1)
+
+                    if check_right_sensor():
+                        obstacle_right()
+
+                    if check_left_sensor():
+                            obstacle_left()
 
                 over_160 = is_over_160()
                 break
+        
+        if check_ir_sensor():
+            #print("Triggering scooper ", diameter)
+            motors.stop()
+            trigger_blades()
+            time.sleep(1)
+        elif time.time() - last_seen_time > timeout:
+            motors.stop()
+            #fallback_strategy()
+            #print("Timeout. Stopping")
+        
+        
+        if check_right_sensor():
+            obstacle_right()
 
-    # Check IR sensor reading and trigger scooper if activated
-    if check_ir_sensor():
-        print("IR sensor activated")
-        trigger_blades()  # Trigger the scooper when IR sensor is activated
-        time.sleep(1)  # Adjust delay as needed
+        if check_left_sensor():
+            obstacle_left()
 
-    # Check timeout and stop motors if necessary
-    if not ball_detected or time.time() - last_seen_time > timeout:
+        if not ball_detected and blade_triggered:
+            #print("Patrolling")
+                patrol()
+
+
+
+        break
+
+
+        '''
+        if not ball_detected:
+            if check_ir_sensor():
+                print("Check 1 ", diameter)
+                motors.stop()
+                trigger_blades()
+                time.sleep(1)
+            elif time.time() - last_seen_time > timeout:
+                motors.stop()
+                #fallback_strategy()
+                #print("Timeout. Stopping")
+            break
+        '''
+
+
+    '''   
+    if not ball_detected:
+        if over_160:
+            if check_ir_sensor():
+                print("Check 1 ", diameter)
+                motors.stop()
+                trigger_blades()
+                time.sleep(1)
+                    
+        else:
+            print("Check 2 ", diameter)
+            motors.stop()   
+            time.sleep(1)
+    '''
+    
+    '''
+    if not ball_detected and diameter < 160:
         motors.stop()
+    elif not ball_detected and diameter > 160 and check_ir_sensor():
+        motors.stop()
+    '''
 
+    '''
+    if not ball_detected:
+        motors.stop()
+    '''
     return img
-
 
 if __name__ == '__main__':
     load_config()
@@ -258,9 +359,7 @@ if __name__ == '__main__':
             
             # Read the captured image using OpenCV
             frame = cv2.imread('/tmp/image.jpg')
-            
-            object_detected(frame)
-            if frame is not None and balls_detected:
+            if frame is not None:
                 frame = run(frame)
                 cv2.imshow('frame', frame)
                 key = cv2.waitKey(1)

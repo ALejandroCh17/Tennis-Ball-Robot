@@ -60,6 +60,7 @@ def object_detected(frame):
         for label, confidence in detections:
             cv2.putText(frame, '{}: {:.2f}'.format(label, confidence), (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             print("tennis ball in view")
+            global balls_detected 
             balls_detected = True
 
     return balls_detected
@@ -173,7 +174,7 @@ def run(img):
     camera_center_x = 320  # Center of the camera feed on the x-axis
     center_threshold_x = 150  # Allowable error in pixels to consider the ball centered on the x-axis
     target_color = ('yellow',)  # Assuming green is the target color
-    power = 40
+    power = 60
     power_sideways = 50
     timeout = 1.0
 
@@ -227,15 +228,19 @@ def run(img):
                 over_160 = is_over_160()
                 break
 
-    # Check IR sensor reading and trigger scooper if activated
-    if check_ir_sensor():
-        print("IR sensor activated")
-        trigger_blades()  # Trigger the scooper when IR sensor is activated
-        time.sleep(1)  # Adjust delay as needed
-
-    # Check timeout and stop motors if necessary
-    if not ball_detected or time.time() - last_seen_time > timeout:
-        motors.stop()
+        if not ball_detected:
+            if check_ir_sensor():
+                print("Check 1 ", diameter)
+                motors.stop()
+                trigger_blades()
+                global balls_detected 
+                balls_detected = True #this is the global variable for deep learning
+                time.sleep(1)
+            elif time.time() - last_seen_time > timeout:
+                motors.stop()
+                #fallback_strategy()
+                #print("Timeout. Stopping")
+            break
 
     return img
 

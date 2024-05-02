@@ -238,8 +238,8 @@ if __name__ == '__main__':
             frame = cv2.imread('/tmp/image.jpg')
             if frame is not None:
                 frame = run(frame)
-                if not ball_detected:
-                    findNextBall(.5,1)
+               # if not ball_detected:
+                   # findNextBall(.5,1)
                 cv2.imshow('frame', frame)
                 key = cv2.waitKey(1)
                 if key == 27:  # ESC key
@@ -252,4 +252,4 @@ if __name__ == '__main__':
         camera.stop()
         motors.stop()
         cv2.destroyAllWindows()
-2
+
